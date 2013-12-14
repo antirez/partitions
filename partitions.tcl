@@ -102,6 +102,11 @@ proc find_local_address {} {
 
 proc initialize {} {
     set ::myself [find_local_address]
+    log "Partitions started, local IP is $::myself."
+}
+
+proc log {msg} {
+    puts "[clock format [clock seconds] -format {%b %d %H:%M:%S}] $msg"
 }
 
 proc main {} {
@@ -110,14 +115,12 @@ proc main {} {
     while 1 {
         array set blocked {}
 
-        puts -nonewline "\x1b\[H\x1b\[2J"; # Clear screen
-        puts "Currently blocked IPs:"
         foreach ip $::peers {
             if {[info exists blocked($ip)]} {
-                puts "BLOCKED $ip"
                 if {[clock milliseconds] > $blocked($ip)} {
                     firewall_unblock $ip
                     unset blocked($ip)
+                    log "Unblocking $ip"
                 }
             } elseif {$ip ne $::myself} {
                 if {rand() < 0.001} {
@@ -125,6 +128,7 @@ proc main {} {
                     incr block_time [clock milliseconds]
                     firewall_block $ip
                     set blocked($ip) $block_time
+                    log "Blocking $ip"
                 }
             }
         }
