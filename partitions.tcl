@@ -13,10 +13,9 @@ set ::peers {
     192.168.1.43
 }
 
-set ::myself 192.168.1.10
 set ::max_block_time 20000
 
-###############################################################################
+### Firewalling layer
 
 set ::uname [string tolower [exec uname]]
 
@@ -68,6 +67,36 @@ proc firewall_unblock ip {
     }
 }
 
+### Utility functions
+
+# This function finds what is this computer local address from the list
+# of ::peers. It uses the trick of calling socket with the -myaddr option
+# and check for error to see if there is or not a local interface with
+# that IP address.
+#
+# If the local address is not found between the list of peers, an empty
+# string is returned.
+proc find_local_address {} {
+    foreach ip $::peers {
+        if {[catch {
+            set s [socket -myaddr $ip $ip 1]
+            # If we have a socket, must be one of our IPs.
+            close $s
+            return $ip
+        } err]} {
+            if {![string match {*requested address*} $err]} {
+                # If the error is not about the address, it must be our IP.
+                return $ip
+            }
+        }
+    }
+    return ""
+}
+
+set ::myself [find_local_address]
+
+### Main loop
+#
 # The main loop just selects with a given probability what address
 # to block and for how much time.
 #
