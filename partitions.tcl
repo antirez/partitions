@@ -93,35 +93,43 @@ proc find_local_address {} {
     return ""
 }
 
-set ::myself [find_local_address]
-
-### Main loop
+### Main
 #
 # The main loop just selects with a given probability what address
 # to block and for how much time.
 #
 # It also displays on screen who is blocked currently.
 
-while 1 {
-    array set blocked {}
+proc initialize {} {
+    set ::myself [find_local_address]
+}
 
-    puts -nonewline "\x1b\[H\x1b\[2J"; # Clear screen
-    puts "Currently blocked IPs:"
-    foreach ip $::peers {
-        if {[info exists blocked($ip)]} {
-            puts "BLOCKED $ip"
-            if {[clock milliseconds] > $blocked($ip)} {
-                firewall_unblock $ip
-                unset blocked($ip)
-            }
-        } elseif {$ip ne $::myself} {
-            if {rand() < 0.001} {
-                set block_time [expr {int(rand()*$::max_block_time)}]
-                incr block_time [clock milliseconds]
-                firewall_block $ip
-                set blocked($ip) $block_time
+proc main {} {
+    initialize
+
+    while 1 {
+        array set blocked {}
+
+        puts -nonewline "\x1b\[H\x1b\[2J"; # Clear screen
+        puts "Currently blocked IPs:"
+        foreach ip $::peers {
+            if {[info exists blocked($ip)]} {
+                puts "BLOCKED $ip"
+                if {[clock milliseconds] > $blocked($ip)} {
+                    firewall_unblock $ip
+                    unset blocked($ip)
+                }
+            } elseif {$ip ne $::myself} {
+                if {rand() < 0.001} {
+                    set block_time [expr {int(rand()*$::max_block_time)}]
+                    incr block_time [clock milliseconds]
+                    firewall_block $ip
+                    set blocked($ip) $block_time
+                }
             }
         }
+        after 100
     }
-    after 100
 }
+
+main
