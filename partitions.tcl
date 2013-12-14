@@ -1,9 +1,8 @@
 #!/usr/bin/tclsh
 #
-# sudo ipfw add 1000 deny src-ip 4.2.2.2/32
-# sudo ipvw del 1000
+# Partitions.tcl -- simulate partitions in a network of computers.
 
-set ::uname [string tolower [exec uname]]
+### Configuration parameters
 
 set ::peers {
     192.168.1.10
@@ -14,34 +13,56 @@ set ::peers {
     192.168.1.43
 }
 
-set ::myself 192.168.1.28
+set ::myself 192.168.1.10
 set ::max_block_time 20000
+
+###############################################################################
+
+set ::uname [string tolower [exec uname]]
 
 # Minimal compatibility firewalling layer.
 # It is only able to filter packets from/to a given IP address
 # using iptables or ipfw depending on OS used.
+#
+# Firewalling API used:
+#
+# IPFW
+#
+# ipfw add 1000 deny src-ip 4.2.2.2/32
+# ipfw add 2000 deny dst-ip 4.2.2.2/32
+# ipvw del 1000
+# ipvw del 2000
+#
+# IPTABLES
+#
+# iptables -A INPUT -p all -s 4.2.2.2/32 -j DROP
+# iptables -A OUTPUT -p all -d 4.2.2.2/32 -j DROP
+# iptables -D INPUT -p all -s 4.2.2.2/32 -j DROP
+# iptables -D OUTPUT -p all -d 4.2.2.2/32 -j DROP
 
 proc firewall_block ip {
-    set i_rule_id [expr {1000+[lsearch $::peers $ip]}]
-    set o_rule_id [expr {2000+[lsearch $::peers $ip]}]
-
     if {$::uname eq {darwin} || $::uname eq {freebsd}} {
+        set i_rule_id [expr {1000+[lsearch $::peers $ip]}]
+        set o_rule_id [expr {2000+[lsearch $::peers $ip]}]
         exec ipfw add $i_rule_id deny src-ip $ip/32
         exec ipfw add $o_rule_id deny dst-ip $ip/32
     } elseif {$::uname eq {linux}} {
+        exec iptables -A INPUT -p all -s $ip/32 -j DROP
+        exec iptables -A OUTPUT -p all -d $ip/32 -j DROP
     } else {
         error "Unsupported operating system $uname"
     }
 }
 
 proc firewall_unblock ip {
-    set i_rule_id [expr {1000+[lsearch $::peers $ip]}]
-    set o_rule_id [expr {2000+[lsearch $::peers $ip]}]
-
     if {$::uname eq {darwin} || $::uname eq {freebsd}} {
+        set i_rule_id [expr {1000+[lsearch $::peers $ip]}]
+        set o_rule_id [expr {2000+[lsearch $::peers $ip]}]
         exec ipfw del $i_rule_id
         exec ipfw del $o_rule_id
     } elseif {$::uname eq {linux}} {
+        exec iptables -D INPUT -p all -s $ip/32 -j DROP
+        exec iptables -D OUTPUT -p all -d $ip/32 -j DROP
     } else {
         error "Unsupported operating system $uname"
     }
