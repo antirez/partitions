@@ -160,6 +160,8 @@ proc log {msg} {
 # Return true if we need to create a partition. This function assumes that
 # we call it roughly ten times per second.
 proc create_partition? {} {
+    if {[llength $::peers] == 0} {return 0}
+
     # The probability of creating a partition is given by the user configured
     # parameter ::partitions_per_hours divided by the number of peers in the
     # network, since every peer can create a partition.
@@ -252,7 +254,7 @@ proc cron {} {
             }
             ::http::cleanup $token
         } err]} {
-            puts $err
+            log "Updating config: $err"
         }
     }
     incr ::iteration
