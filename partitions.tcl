@@ -2,30 +2,14 @@
 #
 # Partitions.tcl -- simulate partitions in a network of computers.
 
-### Configuration parameters
+package require http
 
-# This is the list of peers participating in the  network to partition.
-set ::peers {
-    192.168.1.10
-    192.168.1.28
-    192.168.1.39
-    192.168.1.40
-    192.168.1.42
-    192.168.1.43
-}
+### Default config in case we are not able to load one via HTTP.
 
-# Max time a "local" partition should last (however the different partitions
-# created by the different hosts can result into larger durations of
-# non-reachability between peers).
-#
-# This value is in milliseconds.
+set ::peers {}
 set ::max_block_time 20000
-
-# Number of partitions per hour. Since every peer is able to create partitions
-# this value is automatically divided by the number of peers.
-#
-# Here 60 means a partition every hour, 120 one every 30 seconds and so forth.
-set ::partitions_per_hour 600
+set ::partitions_per_hour 0
+set ::myself {}
 
 # Global state
 
@@ -118,7 +102,9 @@ proc find_local_address {} {
 
 proc initialize {} {
     set ::myself [find_local_address]
+    if {[info exists ::initialized]} return
     log "Partitions started, local IP is $::myself."
+    set ::initialized 1
 }
 
 # Return the number of peers we are currently partitioned from
@@ -151,9 +137,34 @@ proc create_partition? {} {
 }
 
 proc main {} {
-    initialize
+    set iteration 0
+    if {[llength $::argv] != 1} {
+        puts stderr "Usage: partitions.tcl http://config-server/config.txt"
+        exit 1
+    }
+    set ::config_url [lindex $::argv 0]
 
     while 1 {
+        # Refresh the configuration from time to time.
+        if {($iteration % 150) == 0} {
+            puts -nonewline "Updating configuration... "
+            flush stdout
+            if {[catch {
+                set token [::http::geturl $::config_url -timeout 5000]
+                if {[::http::status $token] eq {timeout}} {
+                    puts "timeout from server."
+                } else {
+                    eval [::http::data $token]
+                    puts "configuration updated."
+                    initialize
+                }
+                ::http::cleanup $token
+            } err]} {
+                puts $err
+            }
+        }
+        incr iteration
+
         foreach ip $::peers {
             if {[info exists ::blocked($ip)]} {
                 if {[clock milliseconds] > $::blocked($ip)} {

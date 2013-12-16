@@ -1,0 +1,29 @@
+### Configuration parameters
+
+### This file should be reachable via HTTP by the peers.
+### It is safe to change this file while the configuration is running.
+### Peers will download the new config from time to time and use it.
+
+# This is the list of peers participating in the network to partition.
+set ::peers {
+    192.168.1.10
+    192.168.1.28
+    192.168.1.39
+    192.168.1.40
+    192.168.1.42
+    192.168.1.43
+}
+
+# Max time a "local" partition should last (however the different partitions
+# created by the different hosts can result into larger durations of
+# non-reachability between peers).
+#
+# This value is in milliseconds.
+set ::max_block_time 20000
+
+# Number of partitions per hour. Since every peer is able to create partitions
+# this value is automatically divided by the number of peers.
+#
+# Here 60 means a partition every hour, 120 one every 30 seconds and so forth.
+set ::partitions_per_hour 600
+
