@@ -18,6 +18,7 @@ array set ::blocked {}
 set ::tcp_port 12321
 set ::pending_partition {}
 set ::iteration 0
+set ::old_config {}
 
 ### Firewalling layer
 
@@ -224,15 +225,18 @@ proc create_partition {} {
 proc cron {} {
     # Refresh the configuration from time to time.
     if {($::iteration % 150) == 0} {
-        log "Updating configuration... "
         flush stdout
         if {[catch {
             set token [::http::geturl $::config_url -timeout 5000]
             if {[::http::status $token] eq {timeout}} {
                 log "Timeout from configuration server."
             } else {
-                eval [::http::data $token]
-                 log "Configuration updated."
+                set new_config [::http::data $token]
+                eval $new_config
+                if {$new_config ne $::old_config} {
+                    log "Configuration updated."
+                }
+                set ::old_config $new_config
                 initialize
             }
             ::http::cleanup $token
