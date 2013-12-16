@@ -1,6 +1,8 @@
 #!/usr/bin/tclsh
 #
 # Partitions.tcl -- simulate partitions in a network of computers.
+#
+# See COPYING file for copyright and license.
 
 package require http
 
