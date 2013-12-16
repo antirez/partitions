@@ -4,6 +4,7 @@
 
 ### Configuration parameters
 
+# This is the list of peers participating in the  network to partition.
 set ::peers {
     192.168.1.10
     192.168.1.28
@@ -13,7 +14,22 @@ set ::peers {
     192.168.1.43
 }
 
+# Max time a "local" partition should last (however the different partitions
+# created by the different hosts can result into larger durations of
+# non-reachability between peers).
+#
+# This value is in milliseconds.
 set ::max_block_time 20000
+
+# Number of partitions per hour. Since every peer is able to create partitions
+# this value is automatically divided by the number of peers.
+#
+# Here 60 means a partition every hour, 120 one every 30 seconds and so forth.
+set ::partitions_per_hour 600
+
+# Global state
+
+array set ::blocked {}
 
 ### Firewalling layer
 
@@ -105,29 +121,52 @@ proc initialize {} {
     log "Partitions started, local IP is $::myself."
 }
 
+# Return the number of peers we are currently partitioned from
+# (this only reports the peers we block, but the real reachability of
+# other hosts could be limited by the fact that they are blocking
+# us)
+proc blocked_peers_num {} {
+    array size ::blocked
+}
+
+# Log an event on screen. Always report the number of currently blocked peers.
 proc log {msg} {
-    puts "[clock format [clock seconds] -format {%b %d %H:%M:%S}] $msg"
+    puts "[clock format [clock seconds] -format {%b %d %H:%M:%S}] $msg ([blocked_peers_num] blocked)"
+}
+
+# Return true if we need to create a partition. This function assumes that
+# we call it roughly ten times per second.
+proc create_partition? {} {
+    # The probability of creating a partition is given by the user configured
+    # parameter ::partitions_per_hours divided by the number of peers in the
+    # network, since every peer can create a partition.
+    set pph [expr {double($::partitions_per_hour) / [llength $::peers]}]
+
+    # If the probability of a partition per hour is $pph, the probability
+    # of creating a partition every 0.1 seconds must be divided by
+    # 36000, since 0.1 seconds is 36000 times smaller than 1 hour.
+    set pph [expr {$pph/36000}]
+
+    expr {rand() < $pph}
 }
 
 proc main {} {
     initialize
 
     while 1 {
-        array set blocked {}
-
         foreach ip $::peers {
-            if {[info exists blocked($ip)]} {
-                if {[clock milliseconds] > $blocked($ip)} {
+            if {[info exists ::blocked($ip)]} {
+                if {[clock milliseconds] > $::blocked($ip)} {
                     firewall_unblock $ip
-                    unset blocked($ip)
+                    unset ::blocked($ip)
                     log "Unblocking $ip"
                 }
             } elseif {$ip ne $::myself} {
-                if {rand() < 0.001} {
+                if {[create_partition?]} {
                     set block_time [expr {int(rand()*$::max_block_time)}]
                     incr block_time [clock milliseconds]
                     firewall_block $ip
-                    set blocked($ip) $block_time
+                    set ::blocked($ip) $block_time
                     log "Blocking $ip"
                 }
             }
