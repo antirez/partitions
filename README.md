@@ -29,7 +29,7 @@ the configuration.
 
 The configuration server can be one of the computers you use in the simulation
 as usually it is not very important that the configuration is updated
-promptly. Eventually simulated partitions heals so every peer will be able
+promptly. Eventually simulated partitions heal so every peer will be able
 to read the new configuration.
 
 Partitions model
