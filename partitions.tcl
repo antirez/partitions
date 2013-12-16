@@ -10,6 +10,7 @@ set ::peers {}
 set ::max_block_time 20000
 set ::partitions_per_hour 0
 set ::myself {}
+set ::clean_exit 0
 
 # Global state
 
@@ -167,10 +168,10 @@ proc main {} {
 
         foreach ip $::peers {
             if {[info exists ::blocked($ip)]} {
-                if {[clock milliseconds] > $::blocked($ip)} {
+                if {[clock milliseconds] > $::blocked($ip) || $::clean_exit} {
                     firewall_unblock $ip
                     unset ::blocked($ip)
-                    log "Unblocking $ip"
+                    log "Unblocking $ip."
                 }
             } elseif {$ip ne $::myself} {
                 if {[create_partition?]} {
@@ -178,9 +179,14 @@ proc main {} {
                     incr block_time [clock milliseconds]
                     firewall_block $ip
                     set ::blocked($ip) $block_time
-                    log "Blocking $ip"
+                    log "Blocking $ip."
                 }
             }
+        }
+
+        if {$::clean_exit} {
+            log "Clean exit, bye bye."
+            exit 0
         }
         after 100
     }

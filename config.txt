@@ -27,3 +27,6 @@ set ::max_block_time 20000
 # Here 60 means a partition every hour, 120 one every 30 seconds and so forth.
 set ::partitions_per_hour 600
 
+# Clean exit. Set this to 1 and save the configuration when you want all
+# the partitions.tcl instances to unblock all the peers and exit.
+set ::clean_exit 0
