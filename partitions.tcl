@@ -187,7 +187,7 @@ proc create_partition {} {
 
     set p $::peers
     foreach ip [array names ::blocked] {
-        set idx [lsearch -exact $ip $p]
+        set idx [lsearch -exact $p $ip]
         set p [lreplace $p $idx $idx]
     }
 
