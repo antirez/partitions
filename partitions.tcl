@@ -289,13 +289,17 @@ proc cron {} {
             {
                 set block_time [expr {int(rand()*$::max_block_time)}]
                 incr block_time [clock milliseconds]
-                if {[catch {firewall_block $ip} e]} {
-                    puts "--- Firewalling layer error ---"
-                    puts $e
-                    puts "-------------------------------"
+                if {![info exists ::blocked($ip)]} {
+                    log "Blocking $ip for $block_time ms."
+                    if {[catch {firewall_block $ip} e]} {
+                        puts "--- Firewalling layer error ---"
+                        puts $e
+                        puts "-------------------------------"
+                    }
+                } else {
+                    log "Update $ip block time to $block_time ms."
                 }
                 set ::blocked($ip) $block_time
-                log "Blocking $ip."
             }
         }
         set ::pending_partition {}
