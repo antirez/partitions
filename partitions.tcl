@@ -177,20 +177,29 @@ proc create_partition? {} {
 # The partition will vary in size, and may be composed of just this host
 # or N-1 hosts in total.
 proc create_partition {} {
-    # With less than 2 total peers, or if we don't know our own address
-    # we can't create partitions.
-    if {[llength $::peers] < 2 || $::myself eq {}} return
+    # Can't proceed if I don't have my ip address.
+    if {$::myself eq {}} return
 
-    # Create a copy of the peers without myself
+    # Remove all the peers already partitioned away from me from the
+    # list of peers.
+
     set p $::peers
+    foreach ip [array names ::blocked] {
+        set idx [lsearch -exact $ip $p]
+        set p [lreplace $p $idx $idx]
+    }
+
+    # With less than 2 total peers  we can't create partitions.
+    if {[llength $p] < 2} return
+
+    # Remove myself from the list of peers
     set idx [lsearch -exact $p $::myself]
     set p [lreplace $p $idx $idx]
 
-    # Add from 0 to N-2 other peers
-    set additional [expr {int(rand()*([llength $::peers]-1))}]
+    # Select how many additional nodes we want in the new partition
+    set additional [expr {int(rand()*([llength $p]-1))}]
 
-    # We actually remove random elements to end with a list of length
-    # $additional
+    # Remove random elements to end with a list of length $additional
     while {[llength $p] > $additional} {
         set idx [expr {int(rand()*[llength $p])}]
         set p [lreplace $p $idx $idx]
