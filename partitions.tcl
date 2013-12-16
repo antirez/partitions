@@ -172,6 +172,13 @@ proc create_partition? {} {
     # 36000, since 0.1 seconds is 36000 times smaller than 1 hour.
     set pph [expr {$pph/36000}]
 
+    # If we are already inside a partition, we reduce the probability of a
+    # sub partition by a factor proportional to the number of currently
+    # blocked peers.
+    set num_peers [llength $::peers]
+    set num_blocked [blocked_peers_num]
+    set pph [expr {$pph / $num_peers * ($num_peers - $num_blocked)}]
+
     expr {rand() < $pph}
 }
 
@@ -216,7 +223,7 @@ proc create_partition {} {
     # other peers I want to join the partition with me.
     # We use Tcl non blocking IO, the communication is best-effort since
     # some node may already be part of some other partition.
-    log "Creating new partition ($p)"
+    log "Creating new partition \[$p\]"
 
     set ::pending_partition $p
 
@@ -282,24 +289,25 @@ proc cron {} {
     # contains all the IPs of the partition we are joining, so we actually
     # need to block all the IPs not present in the list.
     if {$::pending_partition ne {}} {
-        log "Entering the partition with $::pending_partition"
+        log "Entering the partition \[$::pending_partition\]"
         foreach ip $::peers {
             if {$ip ne $::myself &&
                 [lsearch -exact $::pending_partition $ip] == -1} \
             {
-                set block_time [expr {int(rand()*$::max_block_time)}]
-                incr block_time [clock milliseconds]
+                set block_dur [expr {int(rand()*$::max_block_time)}]
+                set block_time [expr {[clock milliseconds]+$block_dur}]
                 if {![info exists ::blocked($ip)]} {
-                    log "Blocking $ip for $block_time ms."
+                    set ::blocked($ip) $block_time
+                    log "Blocking $ip for $block_dur ms."
                     if {[catch {firewall_block $ip} e]} {
                         puts "--- Firewalling layer error ---"
                         puts $e
                         puts "-------------------------------"
                     }
                 } else {
-                    log "Update $ip block time to $block_time ms."
+                    set ::blocked($ip) $block_time
+                    log "Update $ip block time to $block_dur ms."
                 }
-                set ::blocked($ip) $block_time
             }
         }
         set ::pending_partition {}

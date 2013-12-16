@@ -38,7 +38,7 @@ Partitions model
 The program simulate the partitions by taking as parameter the probability
 of partitions as partitions per hour, and the maximum duration of partitions.
 
-At some point an instance starts a partition, and tries to be partitioned away
+At some point an instance starts a partition, and tries to get partitioned away
 with a set of other nodes, so it contacts the other nodes asking to join
 the partition. Nodes join a partition by filtering all the nodes but the
 ones in the partition they want to join.
@@ -58,9 +58,13 @@ That later will evolve into
 
 A C | B | D E
 
-But because every node selects its own partition duration, the actual
+Because every node selects its own partition duration, the actual
 transitions between one partition and the other involves entering other
 partitions setups.
+
+Sub-partitions have a smaller probability to happen in the model used
+by Partition.tcl. Specifically the probability of a sub partition is reduced
+proportionally to the number of nodes already partitioned from the instance.
 
 Development
 ---
