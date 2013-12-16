@@ -15,6 +15,9 @@ set ::clean_exit 0
 # Global state
 
 array set ::blocked {}
+set ::tcp_port 12321
+set ::pending_partition {}
+set ::iteration 0
 
 ### Firewalling layer
 
@@ -94,6 +97,36 @@ proc find_local_address {} {
     return ""
 }
 
+### Networking.
+#
+# Partitions uses a simple server / client model to initiate new
+# partitions among peers.
+
+proc accept_clients {fd ip port} {
+    fconfigure $fd -blocking 0
+    set timeout 1000
+    # We have 1 second to read the request or abort.
+    while {$timeout > 0 && $::pending_partition eq {}} {
+        set data [gets $fd]
+        if {$data ne {}} {
+            log "New partition request received from $ip:$port"
+            set ::pending_partition $data
+            # Validate if received data is a valid Tcl list and that
+            # it makes sense.
+            if {[catch {llength $::pending_partition}] ||
+                [llength $::pending_partition] == 0} {
+                set ::pending_partition {}
+            }
+            break
+        }
+        incr timeout -100
+        after 100
+    }
+    close $fd
+}
+
+socket -server accept_clients $::tcp_port
+
 ### Main
 #
 # The main loop just selects with a given probability what address
@@ -137,59 +170,136 @@ proc create_partition? {} {
     expr {rand() < $pph}
 }
 
+# Create a new partition with us and the other peers we want to join with
+# us in the partition.
+#
+# The partition will vary in size, and may be composed of just this host
+# or N-1 hosts in total.
+proc create_partition {} {
+    # With less than 2 total peers, or if we don't know our own address
+    # we can't create partitions.
+    if {[llength $::peers] < 2 || $::myself eq {}} return
+
+    # Create a copy of the peers without myself
+    set p $::peers
+    set idx [lsearch -exact $p $::myself]
+    set p [lreplace $p $idx $idx]
+
+    # Add from 0 to N-2 other peers
+    set additional [expr {int(rand()*([llength $::peers]-1))}]
+
+    # We actually remove random elements to end with a list of length
+    # $additional
+    while {[llength $p] > $additional} {
+        set idx [expr {int(rand()*[llength $p])}]
+        set p [lreplace $p $idx $idx]
+    }
+
+    # And myself of course
+    lappend p $::myself
+
+    # Set this as the new partition to apply, and communicate it to the
+    # other peers I want to join the partition with me.
+    # We use Tcl non blocking IO, the communication is best-effort since
+    # some node may already be part of some other partition.
+    log "Creating new partition ($p)"
+
+    set ::pending_partition $p
+
+    foreach ip $p {
+        if {$ip eq $::myself} continue
+        catch {
+            set s [socket $ip $::tcp_port]
+            fconfigure $s -blocking 0
+            puts $s $p
+            close $s
+        }
+        catch {close $s}
+    }
+}
+
+# The Cron function is the core of the program and is called every
+# 100 milliseconds in order to apply pending partitions, create new
+# partitions, and so forth.
+proc cron {} {
+    # Refresh the configuration from time to time.
+    if {($::iteration % 150) == 0} {
+        log "Updating configuration... "
+        flush stdout
+        if {[catch {
+            set token [::http::geturl $::config_url -timeout 5000]
+            if {[::http::status $token] eq {timeout}} {
+                log "Timeout from configuration server."
+            } else {
+                eval [::http::data $token]
+                 log "Configuration updated."
+                initialize
+            }
+            ::http::cleanup $token
+        } err]} {
+            puts $err
+        }
+    }
+    incr ::iteration
+
+    # Unblock blocked peers if timeout is reached
+    foreach ip [array names ::blocked] {
+        if {[info exists ::blocked($ip)]} {
+            if {[clock milliseconds] > $::blocked($ip) || $::clean_exit} {
+                if {[catch {firewall_unblock $ip} e]} {
+                    puts "--- Firewalling layer error ---"
+                    puts $e
+                    puts "-------------------------------"
+                }
+                unset ::blocked($ip)
+                log "Unblocking $ip."
+            }
+        }
+    }
+
+    # Create a new partition from time to time, if there is not already
+    # a pending partition request to apply.
+    if {$::pending_partition eq {} && [create_partition?]} create_partition
+
+    # If there is a pending partition to apply, the pending variable
+    # contains all the IPs of the partition we are joining, so we actually
+    # need to block all the IPs not present in the list.
+    if {$::pending_partition ne {}} {
+        log "Entering the partition with $::pending_partition"
+        foreach ip $::peers {
+            if {$ip ne $::myself &&
+                [lsearch -exact $::pending_partition $ip] == -1} \
+            {
+                set block_time [expr {int(rand()*$::max_block_time)}]
+                incr block_time [clock milliseconds]
+                if {[catch {firewall_block $ip} e]} {
+                    puts "--- Firewalling layer error ---"
+                    puts $e
+                    puts "-------------------------------"
+                }
+                set ::blocked($ip) $block_time
+                log "Blocking $ip."
+            }
+        }
+        set ::pending_partition {}
+    }
+
+    if {$::clean_exit} {
+        log "Clean exit, bye bye."
+        exit 0
+    }
+
+    after 100 cron
+}
+
 proc main {} {
-    set iteration 0
     if {[llength $::argv] != 1} {
         puts stderr "Usage: partitions.tcl http://config-server/config.txt"
         exit 1
     }
     set ::config_url [lindex $::argv 0]
-
-    while 1 {
-        # Refresh the configuration from time to time.
-        if {($iteration % 150) == 0} {
-            puts -nonewline "Updating configuration... "
-            flush stdout
-            if {[catch {
-                set token [::http::geturl $::config_url -timeout 5000]
-                if {[::http::status $token] eq {timeout}} {
-                    puts "timeout from server."
-                } else {
-                    eval [::http::data $token]
-                    puts "configuration updated."
-                    initialize
-                }
-                ::http::cleanup $token
-            } err]} {
-                puts $err
-            }
-        }
-        incr iteration
-
-        foreach ip $::peers {
-            if {[info exists ::blocked($ip)]} {
-                if {[clock milliseconds] > $::blocked($ip) || $::clean_exit} {
-                    firewall_unblock $ip
-                    unset ::blocked($ip)
-                    log "Unblocking $ip."
-                }
-            } elseif {$ip ne $::myself} {
-                if {[create_partition?]} {
-                    set block_time [expr {int(rand()*$::max_block_time)}]
-                    incr block_time [clock milliseconds]
-                    firewall_block $ip
-                    set ::blocked($ip) $block_time
-                    log "Blocking $ip."
-                }
-            }
-        }
-
-        if {$::clean_exit} {
-            log "Clean exit, bye bye."
-            exit 0
-        }
-        after 100
-    }
+    after 0 cron
+    vwait forever
 }
 
 main
