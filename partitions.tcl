@@ -221,7 +221,7 @@ proc create_partition {} {
     foreach ip $p {
         if {$ip eq $::myself} continue
         catch {
-            set s [socket $ip $::tcp_port]
+            set s [socket -async $ip $::tcp_port]
             fconfigure $s -blocking 0
             puts $s $p
             close $s
