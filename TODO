@@ -1,8 +1,3 @@
-- Take list of IP addresses from web address as txt file.
-- Better partitioning model, expressed as probability of partitions per
-  hours, average duration, max nodes to filter in a given time, and so
-  forth.
 - Run as a deamon and get in touch with other nodes in order to simulate
   more partitioning models. For example a node may ask a few more to go
   into the same partition and so forth.
-- Use proper command line options.
