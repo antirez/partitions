@@ -9,7 +9,7 @@ This is how it works:
 * The program is executed in every computer that is part of the simulation.
 * Using the firewalling layer (ipfw or iptables are supported) Partitions.tcl simulates different kinds of partitions.
 * The configuration is provided to all the instances of Partitions.tcl via HTTP.
-* Every instance of the program is a TCP server lisetning on port 12321 in order for the different instances being able to coordinate partitions together.
+* Every instance of the program is a TCP server listening on port 12321 in order for the different instances being able to coordinate partitions together.
 
 How to execute the program
 ---
