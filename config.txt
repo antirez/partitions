@@ -24,7 +24,7 @@ set ::max_block_time 20000
 # Number of partitions per hour. Since every peer is able to create partitions
 # this value is automatically divided by the number of peers.
 #
-# Here 60 means a partition every hour, 120 one every 30 seconds and so forth.
+# Here 60 means a partition every minute, 120 one every 30 seconds and so forth.
 set ::partitions_per_hour 600
 
 # Clean exit. Set this to 1 and save the configuration when you want all
